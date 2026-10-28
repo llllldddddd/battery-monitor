@@ -187,11 +187,15 @@
       <p>Страница подключается к плате батареи (BMS) напрямую по Bluetooth. Данные никуда не отправляются.</p>
       <ol>
         <li>Включите Bluetooth и геолокацию на телефоне.</li>
-        <li>Закройте другие приложения, подключённые к батарее.</li>
+        <li>Отключите от батареи другие приложения и вкладки, в том числе на компьютере: она принимает только одно подключение.</li>
         <li>Нажмите «Подключить» и выберите устройство <b>BMS-…</b></li>
       </ol>
       <p class="note" id="support"></p>
-      <button class="ghost" id="demoBtn">Показать пример</button>
+      <div class="actions">
+        <button class="ghost" id="allBtn">Батареи нет в списке</button>
+        <button class="ghost" id="demoBtn">Показать пример</button>
+      </div>
+      <p class="note" id="allHint" hidden style="margin:12px 0 0">Сейчас покажутся все Bluetooth-устройства рядом. Выберите батарею: обычно это имя <b>BMS-…</b>, устройство без имени или с самым сильным сигналом.</p>
     </section>
 
     <div id="data" hidden>
@@ -774,19 +778,37 @@ $("connectBtn").addEventListener("click", async () => {
     if (activeTab === "charts") renderCharts();
     return;
   }
+  connect(false);
+});
+
+// showAll: on some phones the BMS name is missing from the scan, so the name filter hides it
+async function connect(showAll) {
   if (!navigator.bluetooth) { setStatus("Этот браузер не умеет Bluetooth", "err"); return; }
   try {
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: "BMS" }, { services: [SERVICE] }],
-      optionalServices: [SERVICE],
-    });
-    demo = false;
-    device.addEventListener("gattserverdisconnected", onDisconnected);
+    device = await navigator.bluetooth.requestDevice(showAll
+      ? { acceptAllDevices: true, optionalServices: [SERVICE] }
+      : { filters: [{ namePrefix: "BMS" }, { services: [SERVICE] }], optionalServices: [SERVICE] });
+  } catch (e) {
+    device = null;
+    setStatus(e.name === "NotFoundError" ? "Устройство не выбрано" : e.message, e.name === "NotFoundError" ? "" : "err");
+    return;
+  }
+  demo = false;
+  device.addEventListener("gattserverdisconnected", onDisconnected);
+  try {
     await setup();
   } catch (e) {
-    if (e.name === "NotFoundError") setStatus("Устройство не выбрано");
-    else setStatus(e.message, "err");
+    const d = device; device = null;
+    d.removeEventListener("gattserverdisconnected", onDisconnected);
+    if (d.gatt.connected) d.gatt.disconnect();
+    $("connectBtn").textContent = "Подключить";
+    setStatus(e.name === "NotFoundError" ? `«${d.name || "без имени"}» — не плата батареи, выберите другое` : e.message, "err");
   }
+}
+
+$("allBtn").addEventListener("click", () => {
+  $("allHint").hidden = false;
+  connect(true);
 });
 
 // Made-up two days with solar charging by day and household load at night
