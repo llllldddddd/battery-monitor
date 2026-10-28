@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1417">
+<title>Монитор батареи</title>
+<style>
+  :root {
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --text: #15201c;
+    --muted: #66736d;
+    --line: #e2e7e4;
+    --accent: #13a36b;
+    --accent-soft: #d9f3e7;
+    --warn: #d98a12;
+    --bad: #d6453d;
+    --info: #2f7fd1;
+    --bar-bg: #e9eeeb;
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1417;
+      --card: #182025;
+      --text: #e8efeb;
+      --muted: #8d9a94;
+      --line: #26313a;
+      --accent: #2fcf8c;
+      --accent-soft: #163a2b;
+      --warn: #f0a531;
+      --bad: #f06a61;
+      --info: #5aa6f0;
+      --bar-bg: #222c33;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1417;
+    --card: #182025;
+    --text: #e8efeb;
+    --muted: #8d9a94;
+    --line: #26313a;
+    --accent: #2fcf8c;
+    --accent-soft: #163a2b;
+    --warn: #f0a531;
+    --bad: #f06a61;
+    --info: #5aa6f0;
+    --bar-bg: #222c33;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 16px 16px 40px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  .status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status.on .dot { background: var(--accent); }
+  .status.err .dot { background: var(--bad); }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: 12px 16px;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .tabs { display: flex; background: var(--bar-bg); border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+  .tabs button { flex: 1; background: transparent; color: var(--muted); padding: 8px; border-radius: 9px; font-size: 15px; }
+  .tabs button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .15); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 12px; }
+  .hero { display: flex; align-items: center; gap: 16px; }
+  .soc { font-size: 56px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .soc small { font-size: 24px; color: var(--muted); font-weight: 600; }
+  .mode { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--bar-bg); color: var(--muted); }
+  .mode.charge { background: var(--accent-soft); color: var(--accent); }
+  .mode.discharge { color: var(--warn); }
+  .battery { flex: 1; height: 56px; border: 3px solid var(--line); border-radius: 10px; padding: 4px; position: relative; }
+  .battery::after { content: ""; position: absolute; right: -9px; top: 16px; width: 6px; height: 18px; border-radius: 0 4px 4px 0; background: var(--line); }
+  .battery .fill { height: 100%; width: 0; border-radius: 6px; background: var(--accent); transition: width .6s; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+  .grid.two { grid-template-columns: repeat(2, 1fr); margin-top: 0; }
+  .kv .k { font-size: 12px; color: var(--muted); }
+  .kv .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kv .v small { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (min-width: 520px) { .cells { grid-template-columns: repeat(8, 1fr); } }
+  .cell { text-align: center; font-variant-numeric: tabular-nums; }
+  .cell .bar { height: 80px; background: var(--bar-bg); border-radius: 8px; display: flex; align-items: flex-end; overflow: hidden; }
+  .cell .bar span { display: block; width: 100%; background: var(--info); border-radius: 8px 8px 0 0; transition: height .6s; }
+  .cell.min .bar span { background: var(--warn); }
+  .cell.max .bar span { background: var(--accent); }
+  .cell .n { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .cell .val { font-size: 13px; font-weight: 600; }
+  .summary { display: flex; justify-content: space-between; margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .summary b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .temps { display: flex; flex-wrap: wrap; gap: 8px; }
+  .temp { background: var(--bar-bg); border-radius: 10px; padding: 8px 12px; font-variant-numeric: tabular-nums; }
+  .temp .k { font-size: 12px; color: var(--muted); }
+  .temp .v { font-weight: 650; }
+  .note { font-size: 13px; color: var(--muted); }
+  .error { color: var(--bad); }
+  [hidden] { display: none !important; }
+  .intro p { margin: 0 0 12px; }
+  .intro ol { margin: 0 0 16px; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  footer { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; }
+
+  /* charts tab */
+  .periods { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .periods button { padding: 6px 12px; font-size: 14px; border-radius: 999px; background: var(--card); color: var(--muted); border: 1px solid var(--line); }
+  .periods button.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .rec-info { font-size: 13px; color: var(--muted); margin: 0 0 12px; display: flex; align-items: center; gap: 6px; }
+  .rec-info.on .dot { background: var(--bad); animation: blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .chart-head h2 { margin: 0; }
+  .chart-head .now { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .chart-sub { font-size: 12px; color: var(--muted); margin: -2px 0 6px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+  .chart-box { position: relative; }
+  .chart-box svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  .chart-box svg text { font: 11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .tip {
+    position: absolute; top: 0; pointer-events: none; z-index: 2;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 6px 10px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+  }
+  .tip .t { color: var(--muted); margin-bottom: 2px; }
+  .tip .row { display: flex; align-items: center; gap: 6px; }
+  .tip .row b { font-variant-numeric: tabular-nums; }
+  .tip .row span:last-child { color: var(--muted); }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tools button { padding: 8px 12px; font-size: 14px; }
+  details.table summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  .table-wrap { overflow-x: auto; margin-top: 8px; }
+  table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; width: 100%; }
+  th, td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+
+  @media (max-width: 400px) {
+    .soc { font-size: 46px; }
+    .kv .v { font-size: 18px; }
+  }
+  @media (max-width: 330px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Батарея</h1>
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">Не подключено</span></div>
+    </div>
+    <div class="actions">
+      <button id="connectBtn">Подключить</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="active" data-tab="now">Сейчас</button>
+    <button data-tab="charts">Графики</button>
+  </nav>
+
+  <div id="tab-now">
+    <section class="card intro" id="intro">
+      <p>Страница подключается к плате батареи (BMS) напрямую по Bluetooth. Данные никуда не отправляются.</p>
+      <ol>
+        <li>Включите Bluetooth и геолокацию на телефоне.</li>
+        <li>Закройте другие приложения, подключённые к батарее.</li>
+        <li>Нажмите «Подключить» и выберите устройство <b>BMS-…</b></li>
+      </ol>
+      <p class="note" id="support"></p>
+      <button class="ghost" id="demoBtn">Показать пример</button>
+    </section>
+
+    <div id="data" hidden>
+      <section class="card">
+        <div class="hero">
+          <div>
+            <div class="soc" id="soc">–<small>%</small></div>
+            <span class="mode" id="mode">–</span>
+          </div>
+          <div class="battery"><div class="fill" id="socFill"></div></div>
+        </div>
+        <div class="grid">
+          <div class="kv"><div class="k">Напряжение</div><div class="v" id="volt">–</div></div>
+          <div class="kv"><div class="k">Ток</div><div class="v" id="curr">–</div></div>
+          <div class="kv"><div class="k">Мощность</div><div class="v" id="power">–</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="grid two">
+          <div class="kv"><div class="k">Остаток</div><div class="v" id="remain">–</div></div>
+          <div class="kv"><div class="k" id="etaLabel">Время</div><div class="v" id="eta">–</div></div>
+          <div class="kv"><div class="k">Циклов</div><div class="v" id="cycles">–</div></div>
+          <div class="kv"><div class="k">Здоровье (SOH)</div><div class="v" id="soh">–</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Ячейки</h2>
+        <div class="cells" id="cells"></div>
+        <div class="summary">
+          <span>мин <b id="cmin">–</b></span>
+          <span>макс <b id="cmax">–</b></span>
+          <span>разница <b id="cdelta">–</b></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Температура</h2>
+        <div class="temps" id="temps"></div>
+      </section>
+
+      <footer id="updated"></footer>
+    </div>
+  </div>
+
+  <div id="tab-charts" hidden>
+    <div class="periods" id="periods"></div>
+    <p class="rec-info" id="recInfo"><span class="dot"></span><span id="recText"></span></p>
+
+    <section class="card" id="chartsEmpty" hidden>
+      <p style="margin:0 0 8px">Пока нет записей за этот период.</p>
+      <p class="note" style="margin:0">Подключитесь к батарее: пока страница открыта и подключена, показания записываются каждые 10 секунд и хранятся на этом устройстве 30 дней. Чтобы посмотреть, как выглядят графики, нажмите «Показать пример» на вкладке «Сейчас».</p>
+    </section>
+
+    <div id="charts"></div>
+
+    <section class="card" id="chartsTools" hidden>
+      <div class="tools">
+        <button class="ghost" id="csvBtn">Скачать CSV</button>
+        <button class="ghost" id="clearBtn">Очистить историю</button>
+      </div>
+      <details class="table" style="margin-top:12px">
+        <summary>Таблица значений</summary>
+        <div class="table-wrap" id="tableWrap"></div>
+      </details>
+    </section>
+  </div>
+</main>
+
+<script>
+// BMS: Nations BLE UART module, Modbus RTU (slave 1, function 03) inside
+const SERVICE = "00002760-08c2-11e1-9073-0e8ac72e1001";
+const TX_CHAR = "00002760-08c2-11e1-9073-0e8ac72e0001";
+const RX_CHAR = "00002760-08c2-11e1-9073-0e8ac72e0002";
+const SLAVE = 1;
+const POLL_MS = 2000;
+const RECORD_MS = 10000;
+const KEEP_MS = 30 * 24 * 3600e3;
+
+const $ = (id) => document.getElementById(id);
+let device = null, txChar = null, rxBuf = [], pending = null, polling = false, demo = false;
+
+function crc16(bytes) {
+  let crc = 0xffff;
+  for (const b of bytes) {
+    crc ^= b;
+    for (let i = 0; i < 8; i++) crc = crc & 1 ? (crc >>> 1) ^ 0xa001 : crc >>> 1;
+  }
+  return crc;
+}
+
+function readRequest(reg, count) {
+  const f = [SLAVE, 0x03, reg >> 8, reg & 0xff, count >> 8, count & 0xff];
+  const c = crc16(f);
+  return new Uint8Array([...f, c & 0xff, c >> 8]);
+}
+
+// Responses can arrive split across several notifications
+function onNotify(e) {
+  const v = e.target.value;
+  for (let i = 0; i < v.byteLength; i++) rxBuf.push(v.getUint8(i));
+  while (rxBuf.length >= 5) {
+    if (rxBuf[0] !== SLAVE || (rxBuf[1] !== 0x03 && rxBuf[1] !== 0x83)) { rxBuf.shift(); continue; }
+    const len = rxBuf[1] === 0x83 ? 5 : 5 + rxBuf[2];
+    if (rxBuf.length < len) return;
+    const frame = rxBuf.splice(0, len);
+    const crcOk = crc16(frame.slice(0, -2)) === (frame[len - 2] | (frame[len - 1] << 8));
+    if (!pending) continue;
+    const p = pending; pending = null; clearTimeout(p.timer);
+    if (!crcOk) p.reject(new Error("Ошибка контрольной суммы"));
+    else if (frame[1] === 0x83) p.reject(new Error("BMS отклонила запрос, код " + frame[2]));
+    else {
+      const regs = [];
+      for (let i = 3; i < len - 2; i += 2) regs.push((frame[i] << 8) | frame[i + 1]);
+      p.resolve(regs);
+    }
+  }
+}
+
+function readRegs(reg, count) {
+  return new Promise((resolve, reject) => {
+    rxBuf = [];
+    const timer = setTimeout(() => { pending = null; reject(new Error("Нет ответа от BMS")); }, 3000);
+    pending = { resolve, reject, timer };
+    const req = readRequest(reg, count);
+    (txChar.writeValueWithoutResponse ? txChar.writeValueWithoutResponse(req) : txChar.writeValue(req)).catch(reject);
+  });
+}
+
+const s16 = (v) => (v & 0x8000 ? v - 0x10000 : v);
+
+async function readAll() {
+  const a = await readRegs(0, 16);
+  const c = await readRegs(15, 17);
+  const t = await readRegs(46, 11);
+  let extra = null;
+  try { [extra] = await readRegs(57, 1); } catch (_) {}
+  const nCells = Math.min(c[0], 16);
+  const nTemps = Math.min(t[0], 10);
+  return {
+    current: s16(a[0]) / 100,
+    voltage: a[1] / 100,
+    soc: a[2],
+    soh: a[3],
+    remain: a[4] / 100,
+    full: a[5] / 100,
+    cycles: a[7],
+    cells: c.slice(1, 1 + nCells).map((v) => v / 1000),
+    temps: t.slice(1, 1 + nTemps).map((v) => s16(v) / 10),
+    boardTemp: extra != null && extra !== 0xffff ? s16(extra) / 10 : null,
+  };
+}
+
+function setStatus(text, kind) {
+  $("statusText").textContent = text;
+  $("status").className = "status" + (kind ? " " + kind : "");
+}
+
+const fmt = (n, d) => n.toLocaleString("ru-RU", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+function hours(h) {
+  if (!isFinite(h) || h <= 0) return "–";
+  if (h > 99) return "> 99 ч";
+  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  return `${hh} ч ${String(mm).padStart(2, "0")} мин`;
+}
+
+function render(d) {
+  $("intro").hidden = true;
+  $("data").hidden = false;
+
+  $("soc").innerHTML = `${d.soc}<small>%</small>`;
+  const fill = $("socFill");
+  fill.style.width = d.soc + "%";
+  fill.style.background = d.soc < 20 ? "var(--bad)" : d.soc < 40 ? "var(--warn)" : "var(--accent)";
+
+  // positive current = charging (sign as reported by the BMS)
+  const I = d.current;
+  const mode = $("mode");
+  if (Math.abs(I) < 0.05) { mode.textContent = "Покой"; mode.className = "mode"; }
+  else if (I > 0) { mode.textContent = "Заряд"; mode.className = "mode charge"; }
+  else { mode.textContent = "Разряд"; mode.className = "mode discharge"; }
+
+  $("volt").innerHTML = `${fmt(d.voltage, 2)} <small>В</small>`;
+  $("curr").innerHTML = `${fmt(I, 2)} <small>А</small>`;
+  $("power").innerHTML = `${fmt(Math.round(d.voltage * I), 0)} <small>Вт</small>`;
+  $("remain").innerHTML = `${fmt(d.remain, 1)} <small>/ ${fmt(d.full, 0)} Ач</small>`;
+  $("cycles").textContent = d.cycles;
+  $("soh").innerHTML = `${d.soh} <small>%</small>`;
+
+  if (I > 0.05) { $("etaLabel").textContent = "До полной"; $("eta").textContent = hours((d.full - d.remain) / I); }
+  else if (I < -0.05) { $("etaLabel").textContent = "До разряда"; $("eta").textContent = hours(d.remain / -I); }
+  else { $("etaLabel").textContent = "Время"; $("eta").textContent = "–"; }
+
+  const min = Math.min(...d.cells), max = Math.max(...d.cells);
+  const lo = 2.8, hi = 3.65;
+  $("cells").innerHTML = d.cells.map((v, i) => {
+    const pct = Math.max(4, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+    const cls = d.cells.length > 1 && v === min ? "min" : d.cells.length > 1 && v === max ? "max" : "";
+    return `<div class="cell ${cls}"><div class="bar"><span style="height:${pct}%"></span></div>
+      <div class="val">${v.toFixed(3)}</div><div class="n">№${i + 1}</div></div>`;
+  }).join("");
+  $("cmin").textContent = min.toFixed(3) + " В";
+  $("cmax").textContent = max.toFixed(3) + " В";
+  const delta = Math.round((max - min) * 1000);
+  $("cdelta").textContent = delta + " мВ";
+  $("cdelta").style.color = delta > 100 ? "var(--bad)" : delta > 50 ? "var(--warn)" : "";
+
+  const temps = d.temps.map((t, i) => [`Датчик ${i + 1}`, t]);
+  if (d.boardTemp != null) temps.push(["Плата", d.boardTemp]);
+  $("temps").innerHTML = temps.map(([k, v]) =>
+    `<div class="temp"><div class="k">${k}</div><div class="v">${fmt(v, 1)} °C</div></div>`).join("");
+
+  $("updated").textContent = (demo ? "Пример данных · " : "Обновлено ") + new Date().toLocaleTimeString("ru-RU");
+}
+
+// ---------- history storage (IndexedDB, this device only) ----------
+
+let dbPromise = null;
+function openDb() {
+  dbPromise ||= new Promise((resolve, reject) => {
+    const r = indexedDB.open("bms-history", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("samples", { keyPath: "t" });
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  return dbPromise;
+}
+
+async function store(mode, fn) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("samples", mode);
+    const req = fn(tx.objectStore("samples"));
+    tx.oncomplete = () => resolve(req ? req.result : undefined);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+let lastRecord = 0;
+async function record(d) {
+  const now = Date.now();
+  if (now - lastRecord < RECORD_MS) return;
+  lastRecord = now;
+  const rec = {
+    t: now, soc: d.soc, v: d.voltage, i: d.current, p: Math.round(d.voltage * d.current),
+    cells: d.cells, temps: d.temps, board: d.boardTemp,
+  };
+  try { await store("readwrite", (s) => s.put(rec)); } catch (_) { return; }
+  if (activeTab === "charts") renderCharts();
+}
+
+async function loadHistory(from) {
+  if (demo) return demoHistory.filter((r) => r.t >= from);
+  try { return await store("readonly", (s) => s.getAll(IDBKeyRange.lowerBound(from))); }
+  catch (_) { return []; }
+}
+
+// ---------- charts ----------
+
+const PERIODS = [["1 ч", 3600e3], ["6 ч", 6 * 3600e3], ["24 ч", 24 * 3600e3], ["7 дн", 7 * 24 * 3600e3], ["Всё", 0]];
+let period = 24 * 3600e3, activeTab = "now", demoHistory = [];
+
+const maxOf = (a) => a.reduce((m, x) => (x > m ? x : m), -Infinity);
+const minOf = (a) => a.reduce((m, x) => (x < m ? x : m), Infinity);
+
+function chartDefs(recs) {
+  const nT = maxOf(recs.map((r) => r.temps.length));
+  const temps = Array.from({ length: Math.max(0, nT) }, (_, i) => ({ name: `Датчик ${i + 1}`, key: (r) => r.temps[i] }));
+  if (recs.some((r) => r.board != null)) temps.push({ name: "Плата", key: (r) => r.board });
+  return [
+    { title: "Заряд", unit: "%", digits: 0, fixed: [0, 100], series: [{ name: "Заряд", key: (r) => r.soc }] },
+    { title: "Мощность", unit: "Вт", digits: 0, zero: true, sub: "выше нуля — заряд, ниже — разряд",
+      series: [{ name: "Мощность", key: (r) => r.p }] },
+    { title: "Напряжение", unit: "В", digits: 2, series: [{ name: "Напряжение", key: (r) => r.v }] },
+    { title: "Ячейки", unit: "В", digits: 3, sub: "самая высокая и самая низкая ячейка",
+      series: [{ name: "макс", key: (r) => maxOf(r.cells) }, { name: "мин", key: (r) => minOf(r.cells) }] },
+    { title: "Температура", unit: "°C", digits: 1, series: temps.slice(0, 3) },
+  ];
+}
+
+function niceScale(lo, hi, count = 4) {
+  const raw = (hi - lo) / count, mag = 10 ** Math.floor(Math.log10(raw)), f = raw / mag;
+  const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
+  const start = Math.floor(lo / step + 1e-9) * step, end = Math.ceil(hi / step - 1e-9) * step;
+  const ticks = [];
+  for (let v = start; v <= end + step / 2; v += step) ticks.push(+v.toFixed(10));
+  return { lo: start, hi: end, ticks, digits: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
+}
+
+function fmtTime(t, span) {
+  const d = new Date(t);
+  const hm = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return span > 36 * 3600e3 ? d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }) : hm;
+}
+const fmtFull = (t) => new Date(t).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+// Average records into ~2px buckets so long periods stay light
+function bucketize(recs, series, from, span, n) {
+  const bw = span / n, map = new Map();
+  for (const r of recs) {
+    const k = Math.min(n - 1, Math.max(0, Math.floor((r.t - from) / bw)));
+    let b = map.get(k);
+    if (!b) map.set(k, (b = { t: 0, n: 0, s: series.map(() => [0, 0]) }));
+    b.t += r.t; b.n++;
+    series.forEach((s, i) => {
+      const v = s.key(r);
+      if (v != null && isFinite(v)) { b.s[i][0] += v; b.s[i][1]++; }
+    });
+  }
+  return [...map.keys()].sort((a, b) => a - b).map((k) => {
+    const b = map.get(k);
+    return { t: b.t / b.n, v: b.s.map(([sum, c]) => (c ? sum / c : null)) };
+  });
+}
+
+function drawChart(cfg, recs, from, to) {
+  const card = document.createElement("section");
+  card.className = "card";
+  const last = recs[recs.length - 1];
+  const multi = cfg.series.length > 1;
+  const nowText = multi ? "" : `${fmt(cfg.series[0].key(last), cfg.digits)} ${cfg.unit}`;
+  card.innerHTML = `<div class="chart-head"><h2>${cfg.title}, ${cfg.unit}</h2><span class="now">${nowText}</span></div>`
+    + (cfg.sub ? `<div class="chart-sub">${cfg.sub}</div>` : "")
+    + (multi ? `<div class="legend">${cfg.series.map((s, i) =>
+      `<span><i class="key" style="background:var(--s${i + 1})"></i>${s.name}</span>`).join("")}</div>` : "")
+    + `<div class="chart-box"></div>`;
+  $("charts").appendChild(card);
+  const box = card.querySelector(".chart-box");
+
+  const W = Math.max(260, box.clientWidth), H = 170;
+  // same plot width on every chart so the time axes line up when scrolling
+  const L = 44, R = 64, T = 10, B = 24;
+  const pw = W - L - R, ph = H - T - B, span = Math.max(1, to - from);
+  const pts = bucketize(recs, cfg.series, from, span, Math.max(1, Math.floor(pw / 2)));
+  const gap = Math.max((span / Math.floor(pw / 2)) * 2.5, RECORD_MS * 6);
+
+  const vals = pts.flatMap((p) => p.v).filter((v) => v != null);
+  let lo = minOf(vals), hi = maxOf(vals);
+  if (cfg.fixed) { lo = Math.min(lo, cfg.fixed[0]); hi = Math.max(hi, cfg.fixed[1]); }
+  if (cfg.zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+  const minSpan = 5 * 10 ** -cfg.digits;
+  if (hi - lo < minSpan) { const m = (hi + lo) / 2; lo = m - minSpan / 2; hi = m + minSpan / 2; }
+  const sc = niceScale(lo, hi);
+  const x = (t) => L + ((t - from) / span) * pw;
+  const y = (v) => T + (1 - (v - sc.lo) / (sc.hi - sc.lo)) * ph;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for (const v of sc.ticks) {
+    const isZero = cfg.zero && v === 0;
+    svg += `<line x1="${L}" x2="${L + pw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--${isZero ? "muted" : "line"})" stroke-width="1" ${isZero ? 'stroke-opacity=".7"' : ""}/>`;
+    svg += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${fmt(v, sc.digits)}</text>`;
+  }
+  for (let k = 0; k <= 3; k++) {
+    const t = from + (span * k) / 3;
+    const anchor = k === 0 ? "start" : k === 3 ? "end" : "middle";
+    svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="${anchor}">${fmtTime(t, span)}</text>`;
+  }
+  const ends = [];
+  cfg.series.forEach((s, i) => {
+    let d = "", prev = null, end = null;
+    for (const p of pts) {
+      const v = p.v[i];
+      if (v == null) { prev = null; continue; }
+      d += (prev && p.t - prev.t <= gap ? "L" : "M") + x(p.t).toFixed(1) + "," + y(v).toFixed(1);
+      prev = p; end = { y: y(v), name: multi ? s.name : fmt(v, cfg.digits) };
+    }
+    svg += `<path d="${d}" fill="none" stroke="var(--s${i + 1})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (end) ends.push(end);
+  });
+  // direct labels at the line ends (series name, or the latest value for a single line),
+  // nudged apart so they never overlap
+  ends.sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 13);
+  for (const e of ends) svg += `<text x="${L + pw + 6}" y="${Math.min(H - B, e.y) + 4}">${e.name}</text>`;
+  svg += `<g class="hover" visibility="hidden"><line y1="${T}" y2="${T + ph}" stroke="var(--muted)" stroke-width="1"/>`
+    + cfg.series.map((_, i) => `<circle r="4" fill="var(--s${i + 1})" stroke="var(--card)" stroke-width="2"/>`).join("") + `</g>`;
+  svg += `<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="transparent"/></svg>`;
+  box.innerHTML = svg;
+
+  // crosshair + tooltip: snaps to the nearest point, lists every series
+  const svgEl = box.querySelector("svg"), hover = svgEl.querySelector(".hover");
+  const hl = hover.querySelector("line"), dots = hover.querySelectorAll("circle");
+  const tip = document.createElement("div");
+  tip.className = "tip"; tip.hidden = true;
+  box.appendChild(tip);
+  const show = (ev) => {
+    const r = svgEl.getBoundingClientRect();
+    const px = ((ev.clientX - r.left) / r.width) * W;
+    const t = from + ((px - L) / pw) * span;
+    let lo2 = 0, hi2 = pts.length - 1;
+    while (hi2 - lo2 > 1) { const m = (lo2 + hi2) >> 1; if (pts[m].t < t) lo2 = m; else hi2 = m; }
+    const p = Math.abs(pts[lo2].t - t) < Math.abs(pts[hi2].t - t) ? pts[lo2] : pts[hi2];
+    const cx = x(p.t);
+    hl.setAttribute("x1", cx); hl.setAttribute("x2", cx);
+    dots.forEach((c, i) => {
+      if (p.v[i] == null) { c.setAttribute("visibility", "hidden"); return; }
+      c.setAttribute("visibility", "visible"); c.setAttribute("cx", cx); c.setAttribute("cy", y(p.v[i]));
+    });
+    hover.setAttribute("visibility", "visible");
+    tip.replaceChildren();
+    const head = document.createElement("div");
+    head.className = "t"; head.textContent = fmtFull(p.t);
+    tip.appendChild(head);
+    cfg.series.forEach((s, i) => {
+      if (p.v[i] == null) return;
+      const row = document.createElement("div"); row.className = "row";
+      const key = document.createElement("i"); key.className = "key"; key.style.background = `var(--s${i + 1})`;
+      const val = document.createElement("b"); val.textContent = `${fmt(p.v[i], cfg.digits)} ${cfg.unit}`;
+      const name = document.createElement("span"); name.textContent = s.name;
+      row.append(key, val, name);
+      tip.appendChild(row);
+    });
+    tip.hidden = false;
+    const scale = r.width / W, tw = tip.offsetWidth;
+    let left = cx * scale + 12;
+    if (left + tw > r.width) left = cx * scale - tw - 12;
+    tip.style.left = Math.max(0, left) + "px";
+  };
+  const hide = () => { hover.setAttribute("visibility", "hidden"); tip.hidden = true; };
+  svgEl.addEventListener("pointermove", show);
+  svgEl.addEventListener("pointerdown", show);
+  svgEl.addEventListener("pointerleave", hide);
+}
+
+function renderTable(recs) {
+  const n = maxOf(recs.map((r) => r.temps.length));
+  const rows = recs.slice(-200).reverse().map((r) => `<tr><td>${fmtFull(r.t)}</td><td>${r.soc}</td><td>${fmt(r.v, 2)}</td>`
+    + `<td>${fmt(r.i, 2)}</td><td>${r.p}</td><td>${minOf(r.cells).toFixed(3)}</td><td>${maxOf(r.cells).toFixed(3)}</td>`
+    + Array.from({ length: n }, (_, i) => `<td>${r.temps[i] != null ? fmt(r.temps[i], 1) : ""}</td>`).join("") + `</tr>`).join("");
+  $("tableWrap").innerHTML = `<table><thead><tr><th>Время</th><th>%</th><th>В</th><th>А</th><th>Вт</th><th>мин яч.</th><th>макс яч.</th>`
+    + Array.from({ length: n }, (_, i) => `<th>Т${i + 1} °C</th>`).join("") + `</tr></thead><tbody>${rows}</tbody></table>`
+    + (recs.length > 200 ? `<p class="note">Показаны последние 200 из ${recs.length}. Все значения — в CSV.</p>` : "");
+}
+
+let chartRecs = [];
+async function renderCharts() {
+  const now = Date.now();
+  const recs = await loadHistory(period ? now - period : 0);
+  chartRecs = recs;
+  const connected = !demo && device && device.gatt.connected;
+  $("recInfo").className = "rec-info" + (connected ? " on" : "");
+  $("recText").textContent = demo ? "Пример: выдуманные данные за 2 суток"
+    : connected ? "Идёт запись каждые 10 секунд"
+    : "Запись идёт, только пока страница подключена к батарее";
+  $("charts").replaceChildren();
+  const enough = recs.length >= 2;
+  $("chartsEmpty").hidden = enough;
+  $("chartsTools").hidden = !enough;
+  if (!enough) return;
+  const from = period ? now - period : recs[0].t;
+  for (const cfg of chartDefs(recs)) if (cfg.series.length) drawChart(cfg, recs, from, now);
+  renderTable(recs);
+}
+
+function exportCsv() {
+  const recs = chartRecs;
+  const nC = maxOf(recs.map((r) => r.cells.length)), nT = maxOf(recs.map((r) => r.temps.length));
+  const range = (n, f) => Array.from({ length: Math.max(0, n) }, (_, i) => f(i));
+  const head = ["время", "заряд_%", "напряжение_В", "ток_А", "мощность_Вт",
+    ...range(nC, (i) => `ячейка${i + 1}_В`), ...range(nT, (i) => `датчик${i + 1}_C`), "плата_C"];
+  const rows = recs.map((r) => [new Date(r.t).toLocaleString("ru-RU"), r.soc, r.v, r.i, r.p,
+    ...range(nC, (i) => r.cells[i] ?? ""), ...range(nT, (i) => r.temps[i] ?? ""), r.board ?? ""]);
+  // ';' and decimal comma so Russian Excel opens it as columns
+  const cell = (x) => (typeof x === "number" ? String(x).replace(".", ",") : `"${String(x).replace(/"/g, '""')}"`);
+  const csv = "﻿" + [head, ...rows].map((row) => row.map(cell).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `battery-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+$("periods").innerHTML = PERIODS.map(([label, ms]) =>
+  `<button data-ms="${ms}" class="${ms === period ? "active" : ""}">${label}</button>`).join("");
+$("periods").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  period = +b.dataset.ms;
+  $("periods").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+  renderCharts();
+});
+
+document.querySelector(".tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  activeTab = b.dataset.tab;
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
+  $("tab-now").hidden = activeTab !== "now";
+  $("tab-charts").hidden = activeTab !== "charts";
+  if (activeTab === "charts") renderCharts();
+});
+
+$("csvBtn").addEventListener("click", exportCsv);
+$("clearBtn").addEventListener("click", async () => {
+  if (demo) return;
+  if (!confirm("Удалить всю записанную историю на этом устройстве?")) return;
+  try { await store("readwrite", (s) => s.clear()); } catch (_) {}
+  renderCharts();
+});
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (activeTab === "charts") renderCharts(); }, 200);
+});
+
+// ---------- connection ----------
+
+// Keeping the screen on keeps Bluetooth alive, so recording has no gaps
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch (_) {}
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && device && device.gatt.connected) keepAwake(true);
+});
+
+async function pollLoop() {
+  if (polling) return;
+  polling = true;
+  let fails = 0;
+  while (device && device.gatt.connected) {
+    try {
+      const d = await readAll();
+      render(d);
+      record(d);
+      setStatus("Подключено: " + device.name, "on");
+      fails = 0;
+    } catch (e) {
+      fails++;
+      setStatus(e.message, "err");
+      if (fails >= 5) { device.gatt.disconnect(); break; }
+    }
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+  polling = false;
+}
+
+async function setup() {
+  setStatus("Подключаюсь…");
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(SERVICE);
+  txChar = await svc.getCharacteristic(TX_CHAR);
+  const rx = await svc.getCharacteristic(RX_CHAR);
+  rx.addEventListener("characteristicvaluechanged", onNotify);
+  await rx.startNotifications();
+  $("connectBtn").textContent = "Отключить";
+  keepAwake(true);
+  if (activeTab === "charts") renderCharts();
+  pollLoop();
+}
+
+function onDisconnected() {
+  $("connectBtn").textContent = "Подключить";
+  setStatus("Связь потеряна, переподключаюсь…", "err");
+  setTimeout(async () => {
+    if (!device || device.gatt.connected) return;
+    try { await setup(); } catch (_) { setStatus("Не подключено"); keepAwake(false); }
+  }, 3000);
+}
+
+$("connectBtn").addEventListener("click", async () => {
+  if (device && device.gatt.connected) {
+    const d = device; device = null;
+    d.removeEventListener("gattserverdisconnected", onDisconnected);
+    d.gatt.disconnect();
+    keepAwake(false);
+    $("connectBtn").textContent = "Подключить";
+    setStatus("Отключено");
+    if (activeTab === "charts") renderCharts();
+    return;
+  }
+  if (!navigator.bluetooth) { setStatus("Этот браузер не умеет Bluetooth", "err"); return; }
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "BMS" }, { services: [SERVICE] }],
+      optionalServices: [SERVICE],
+    });
+    demo = false;
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    await setup();
+  } catch (e) {
+    if (e.name === "NotFoundError") setStatus("Устройство не выбрано");
+    else setStatus(e.message, "err");
+  }
+});
+
+// Made-up two days with solar charging by day and household load at night
+function makeDemoHistory() {
+  const out = [], step = 30e3, now = Date.now();
+  let soc = 80;
+  for (let t = now - 48 * 3600e3; t <= now; t += step) {
+    const dt = new Date(t), h = dt.getHours() + dt.getMinutes() / 60;
+    const sun = Math.max(0, Math.sin(((h - 7) / 12) * Math.PI));
+    const load = 90 + (h > 18 && h < 23 ? 260 : 0) + 30 * Math.sin(t / 7e5);
+    let p = sun * 1500 - load;
+    if ((soc >= 100 && p > 0) || (soc <= 5 && p < 0)) p = 0;
+    soc = Math.min(100, Math.max(5, soc + ((p * step) / 3600e3 / 2650) * 100));
+    const i = p / 26.5, v = 25.4 + soc * 0.016 + i * 0.01;
+    const cells = [0.004, 0.001, -0.002, -0.009, 0.001, -0.002, -0.001, 0.001]
+      .map((o) => +(v / 8 + o * (1 + Math.abs(i) / 40)).toFixed(3));
+    const temp = 19 + 2 * Math.sin(((h - 9) / 24) * 2 * Math.PI) + Math.abs(i) / 30;
+    out.push({ t, soc: Math.round(soc), v: +v.toFixed(2), i: +i.toFixed(2), p: Math.round(p), cells,
+      temps: [+temp.toFixed(1), +(temp + 0.3).toFixed(1)], board: +(temp + 1.5 + Math.abs(i) / 20).toFixed(1) });
+  }
+  return out;
+}
+
+// Values read from the real battery on 2026-10-28
+$("demoBtn").addEventListener("click", () => {
+  demo = true;
+  demoHistory = makeDemoHistory();
+  render({
+    current: 0, voltage: 27.4, soc: 100, soh: 100, remain: 99.91, full: 100, cycles: 2,
+    cells: [3.438, 3.431, 3.422, 3.407, 3.431, 3.422, 3.424, 3.431],
+    temps: [20.0, 20.2], boardTemp: 21.7,
+  });
+});
+
+if (!navigator.bluetooth) {
+  $("support").innerHTML = '<span class="error">Этот браузер не поддерживает Bluetooth. Откройте страницу в Chrome на Android или на компьютере.</span>';
+}
+
+// drop records older than 30 days
+store("readwrite", (s) => s.delete(IDBKeyRange.upperBound(Date.now() - KEEP_MS))).catch(() => {});
+</script>
+</body>
+</html>
