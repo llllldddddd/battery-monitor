@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1417">
 <title>Монитор батареи</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root {
     --bg: #f4f6f5;
@@ -663,9 +666,12 @@ function exportCsv() {
   // ';' and decimal comma so Russian Excel opens it as columns
   const cell = (x) => (typeof x === "number" ? String(x).replace(".", ",") : `"${String(x).replace(/"/g, '""')}"`);
   const csv = "﻿" + [head, ...rows].map((row) => row.map(cell).join(";")).join("\r\n");
+  const name = `battery-${new Date().toISOString().slice(0, 10)}.csv`;
+  // the Mac and Android apps can't download blobs, they save through the native side
+  if (window.nativeSave) { window.nativeSave(name, csv); return; }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  a.download = `battery-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -758,13 +764,36 @@ async function setup() {
   pollLoop();
 }
 
+// Keeps trying until the battery is back or the user picks another one / disconnects:
+// after a power cut the BMS can take a while to come back
+function reconnect(d, delay) {
+  setTimeout(async () => {
+    if (device !== d || polling) return;
+    try { await setup(); }
+    catch (_) {
+      if (device !== d) return;
+      setStatus(`Жду батарею «${d.name || "BMS"}»…`, "err");
+      reconnect(d, 10000);
+    }
+  }, delay);
+}
+
 function onDisconnected() {
   $("connectBtn").textContent = "Подключить";
   setStatus("Связь потеряна, переподключаюсь…", "err");
-  setTimeout(async () => {
-    if (!device || device.gatt.connected) return;
-    try { await setup(); } catch (_) { setStatus("Не подключено"); keepAwake(false); }
-  }, 3000);
+  reconnect(device, 3000);
+}
+
+// The apps remember the battery and connect to it on start, without the picker
+async function autoConnect() {
+  if (!window.isNativeApp) return;
+  let d = null;
+  try { [d] = await navigator.bluetooth.getDevices(); } catch (_) {}
+  if (!d || device) return;
+  device = d;
+  device.addEventListener("gattserverdisconnected", onDisconnected);
+  setStatus(`Подключаюсь к «${d.name || "BMS"}»…`);
+  reconnect(d, 0);
 }
 
 $("connectBtn").addEventListener("click", async () => {
@@ -849,6 +878,13 @@ if (!navigator.bluetooth) {
 
 // drop records older than 30 days
 store("readwrite", (s) => s.delete(IDBKeyRange.upperBound(Date.now() - KEEP_MS))).catch(() => {});
+
+autoConnect();
+
+// Cache the page so it opens without internet (the router is off when the power is)
+if (!window.isNativeApp && "serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>

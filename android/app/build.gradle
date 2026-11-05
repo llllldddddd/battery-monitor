@@ -1,0 +1,38 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "io.github.llllldddddd.battery"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "io.github.llllldddddd.battery"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        // signed with the debug key so the APK installs directly, without Google Play
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // the same page as the website: ../../index.html plus the Bluetooth bridge
+    sourceSets.main.assets.srcDir "build/web"
+}
+
+def copyWeb = tasks.register("copyWeb", Sync) {
+    from("../../index.html")
+    from("../../app/bridge.js")
+    into("build/web")
+}
+preBuild.dependsOn copyWeb
